@@ -53,8 +53,9 @@ ROUTE_FEATURE = "trip_route"  # "PU_DO" string, used by the one-hot comparison r
 RANDOM_STATE = 42
 
 # --- MLflow -------------------------------------------------------------------------
+# Port 5001, not 5000: macOS uses 5000 for AirPlay Receiver.
 MLFLOW_DEFAULTS = {
-    "MLFLOW_TRACKING_URI": "http://127.0.0.1:5000",
+    "MLFLOW_TRACKING_URI": "http://127.0.0.1:5001",
     "MLFLOW_EXPERIMENT": "trip-duration",
     "REGISTERED_MODEL_NAME": "trip-duration",
     "MODEL_ALIAS": "production",
