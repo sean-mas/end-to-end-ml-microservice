@@ -41,3 +41,41 @@ Each choice made while building this project, why it was made, and what was not 
 - **Decision:** Add the pickup hour (0-23) and weekday (Monday = 0) as numbers.
 - **Why:** The median speed drops from 16 mph at 05:00 to about 8.5 mph from 11:00 to 18:00, and weekdays are slower than Sundays. Both are known at booking.
 - **Not picked:** Holidays or weather. They would need a second data source, which the brief doesn't ask for.
+
+## Experiments and model choice
+
+### 7. MLflow server with SQLite and served artifacts, on port 5001
+
+- **Decision:** `mlflow server --backend-store-uri sqlite:///mlflow.db --artifacts-destination ./mlartifacts --port 5001`.
+- **Why:** The model registry needs a database behind it, and SQLite is a single file. With `--artifacts-destination`, clients upload and download models through the server, so a Docker container only needs the server's address, not a mounted folder. Port 5000 is taken by macOS AirPlay Receiver.
+- **Not picked:** A plain `./mlruns` folder (no registry), or `--default-artifact-root`, which records paths on this laptop that a container can't see.
+
+### 8. A ladder of four baselines before any tuning
+
+- **Decision:** Log four runs, each adding one idea: always guess the average, the course's linear model on one-hot routes, a Random Forest on zones and distance, then the same forest plus hour and weekday.
+- **Why:** Each step shows what one idea is worth. The ladder also proves the forest earns its size: the course's linear model is 0.5 MB.
+- **Not picked:** Tuning straight away, which would hide where the gain comes from.
+
+### 9. The forest starts with leaves of at least 50 trips
+
+- **Decision:** 50 trees, depth up to 20, at least 50 trips per leaf.
+- **Why:** sklearn's defaults (100 trees, one trip per leaf) would grow millions of leaves per tree and need tens of GB for 2.2 million trips.
+- **Not picked:** sklearn defaults.
+
+### 10. Optuna for tuning; trials save scores, not models
+
+- **Decision:** 20 Optuna trials over number of trees, depth, leaf size and share of features per split. Each trial is a child run under one parent run in MLflow.
+- **Why:** Optuna picks each next setting from how earlier ones scored, so 20 trials go further than a 20-point grid. Saving 20 forests of 100 MB+ would fill gigabytes, so only the winner is retrained and saved.
+- **Not picked:** GridSearchCV, which also uses random cross-validation folds instead of the date split.
+
+### 11. Selection rule, fixed before tuning
+
+- **Decision:** The run with the lowest validation RMSE wins. Runs within 0.05 minutes (3 seconds) of the best count as tied, and the smallest model among them wins.
+- **Why:** Writing the rule down first stops it from being bent after seeing results. 3 seconds of error is invisible to a rider, but a model half the size loads faster and costs less memory in the API container.
+- **Not picked:** Lowest RMSE alone; best training score (rewards overfitting).
+
+### 12. Models saved with skops, trusting only sklearn and project types
+
+- **Decision:** MLflow saves sklearn models in the skops format. The trust list holds only types from `sklearn.` and `trip_duration.`.
+- **Why:** Unlike pickle, skops refuses to load code it wasn't told to trust, so a tampered model file can't run arbitrary code in the API.
+- **Not picked:** Pickle, or trusting every type the file contains.
