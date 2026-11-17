@@ -29,3 +29,15 @@ Each choice made while building this project, why it was made, and what was not 
 - **Decision:** Pickup zone, dropoff zone, trip distance, pickup hour and pickup weekday.
 - **Why:** Fare, tip, tolls and total are only known after the trip ends. A model that uses them would look good in testing and be useless in the API. The distance is the planned distance a booking app would send.
 - **Not picked:** Every column in the file.
+
+### 5. Keep trips of 1-60 minutes and 0.1-100 miles in valid zones
+
+- **Decision:** Drop trips outside 1-60 minutes, 0.1-100 miles, zones 1-265, or with a pickup outside January. This keeps 3,325,872 of 3,475,226 trips (95.7%).
+- **Why:** These rules come from the course. The histogram in `notebooks/01-explore.ipynb` shows that 97.9% of trips last 1-60 minutes, and the rest include negative durations and multi-day meters. Zero-distance trips (2.6%) carry no signal about speed.
+- **Not picked:** Cut-offs chosen by percentile, which would change every month.
+
+### 6. Pickup hour and weekday as features
+
+- **Decision:** Add the pickup hour (0-23) and weekday (Monday = 0) as numbers.
+- **Why:** The median speed drops from 16 mph at 05:00 to about 8.5 mph from 11:00 to 18:00, and weekdays are slower than Sundays. Both are known at booking.
+- **Not picked:** Holidays or weather. They would need a second data source, which the brief doesn't ask for.
