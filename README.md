@@ -87,7 +87,7 @@ MLflow is now at http://127.0.0.1:5001. It runs on port 5001 because macOS uses 
 uv run trip-duration all
 ```
 
-The last lines should read:
+The run is reproducible: a fresh clone gives the same 25 runs and the same winner. Near the end you should see (after a timestamp):
 
 ```text
 Winner: trial-16 (val_rmse=4.017, 190 MB). Best RMSE overall: 4.005. 10 runs tied.
