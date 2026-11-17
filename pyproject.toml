@@ -48,6 +48,9 @@ dev = [
 testpaths = ["tests"]
 # The API package (app/) sits at the repo root next to src/.
 pythonpath = ["."]
+markers = [
+    "integration: needs the MLflow server with a promoted model (docker compose up -d mlflow)",
+]
 
 [tool.ruff.lint]
 extend-select = ["I", "B", "UP"]
