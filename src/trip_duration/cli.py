@@ -64,3 +64,20 @@ def promote(run_id: str | None) -> None:
 
     version = register(run_id)
     click.echo(f"Version {version} is now @{config.setting('MODEL_ALIAS')}")
+
+
+@cli.command(name="all")
+@click.option("--trials", default=20, show_default=True)
+def run_all(trials: int) -> None:
+    """Every stage in order: download, train, tune, select, promote."""
+    from .promote import promote as register
+    from .selection import select as pick
+    from .train import train_baselines
+    from .tune import tune as run_study
+
+    dataset = _dataset()  # load and split once, reuse for every stage
+    train_baselines(dataset)
+    run_study(dataset, n_trials=trials)
+    run_id = pick(dataset)
+    version = register(run_id)
+    click.echo(f"Version {version} is now @{config.setting('MODEL_ALIAS')}")

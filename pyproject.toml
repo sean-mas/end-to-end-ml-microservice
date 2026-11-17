@@ -49,8 +49,16 @@ markers = [
     "integration: needs the MLflow server with a promoted model (docker compose up -d mlflow)",
 ]
 
+[tool.ruff]
+# ./mlflow holds the tracking server's data, not code.
+extend-exclude = ["mlflow", "data"]
+
 [tool.ruff.lint]
 extend-select = ["I", "B", "UP"]
+
+[tool.ruff.lint.isort]
+# Without this, the ./mlflow data folder makes ruff treat mlflow as project code.
+known-third-party = ["mlflow"]
 
 [tool.uv]
 required-version = ">=0.13.5"
