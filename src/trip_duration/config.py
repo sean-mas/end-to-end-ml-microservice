@@ -42,10 +42,13 @@ PERIOD_END = "2025-02-01"  # exclusive
 # Only what is known when a trip is booked. Fare, tip and total are known only after
 # the trip, so using them would leak the answer into the model.
 TARGET = "duration_minutes"
-NUMERIC_FEATURES = ["PULocationID", "DOLocationID", "trip_distance", "pickup_hour"]
-WEEKDAY_FEATURE = "pickup_weekday"
-FEATURES = [*NUMERIC_FEATURES, WEEKDAY_FEATURE]
-ROUTE_FEATURE = "trip_route"  # "PU_DO", used by the one-hot comparison run only
+PICKUP_TIME = "tpep_pickup_datetime"
+DROPOFF_TIME = "tpep_dropoff_datetime"
+# Zone IDs go in as plain numbers: trees split on them directly, so no one-hot needed.
+BASE_FEATURES = ["PULocationID", "DOLocationID", "trip_distance"]
+TIME_FEATURES = ["pickup_hour", "pickup_weekday"]  # weekday: Monday=0 ... Sunday=6
+FEATURES = [*BASE_FEATURES, *TIME_FEATURES]
+ROUTE_FEATURE = "trip_route"  # "PU_DO" string, used by the one-hot comparison run
 
 RANDOM_STATE = 42
 
