@@ -79,3 +79,29 @@ Each choice made while building this project, why it was made, and what was not 
 - **Decision:** MLflow saves sklearn models in the skops format. The trust list holds only types from `sklearn.` and `trip_duration.`.
 - **Why:** Unlike pickle, skops refuses to load code it wasn't told to trust, so a tampered model file can't run arbitrary code in the API.
 - **Not picked:** Pickle, or trusting every type the file contains.
+
+## Serving
+
+### 13. The API loads the model once at startup, by alias
+
+- **Decision:** At startup the API loads `models:/trip-duration@production` from the MLflow registry and keeps it in memory. `/health` and every answer name the version.
+- **Why:** A 190 MB model takes about a second to load, which would be added to every request if loaded per call. Loading by alias means promoting a new version needs only an API restart, not a code change.
+- **Not picked:** Loading per request (the course demo), or copying a model file into the image.
+
+### 14. The API starts even when MLflow is down
+
+- **Decision:** If the model can't be loaded, the API still starts. `/health` answers 503 with the reason, and `/predict` answers 503.
+- **Why:** A container that crashes on startup restarts in a loop and hides the cause. A clear 503 tells the operator what is wrong.
+- **Not picked:** Failing at startup.
+
+### 15. Requests are checked against the training ranges
+
+- **Decision:** Zones must be 1-265 and distance 0.1-100 miles, the same bounds as the cleaning rule. Anything else gets a 422 before the model sees it.
+- **Why:** The model has never seen trips outside these ranges, so its answer there would be a guess dressed up as a prediction.
+- **Not picked:** Accepting any number.
+
+### 16. Behaviour tests run on the real model, outside CI
+
+- **Decision:** API tests use a fake model and run in CI. Five behaviour tests (longer trips take longer, rush hour is slower, the minute of pickup doesn't matter, predictions stay in range, the API matches the model) load the real production model and are marked `integration`.
+- **Why:** The real model lives in a local MLflow registry that CI can't reach. The fast tests guard the code; the behaviour tests guard the model.
+- **Not picked:** Training a toy model in CI, which would test a model nobody serves.

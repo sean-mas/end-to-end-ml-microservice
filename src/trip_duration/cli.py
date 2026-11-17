@@ -52,3 +52,15 @@ def select() -> None:
 
     run_id = pick(_dataset())
     click.echo(f"Candidate run: {run_id}")
+
+
+@cli.command()
+@click.option(
+    "--run-id", default=None, help="Run to promote. Default: newest candidate."
+)
+def promote(run_id: str | None) -> None:
+    """Stage 4: register the candidate and point the production alias at it."""
+    from .promote import promote as register
+
+    version = register(run_id)
+    click.echo(f"Version {version} is now @{config.setting('MODEL_ALIAS')}")
