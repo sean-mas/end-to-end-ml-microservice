@@ -1,0 +1,57 @@
+# Two services from one image:
+#   mlflow  experiment tracking + model registry  http://127.0.0.1:5001
+#   api     prediction service                     http://127.0.0.1:8000/docs
+# Training runs on the host (uv run trip-duration ...) and logs to the mlflow
+# service; the api loads the model marked @production from it.
+
+name: end-to-end-ml-microservice
+
+x-image: &image
+  build: .
+  image: trip-duration-service:latest
+
+services:
+  mlflow:
+    <<: *image
+    # Root only here, so the server can create ./mlflow on any host (Linux bind
+    # mounts keep host ownership). The api, which takes outside requests, runs
+    # as the image's non-root user.
+    user: root
+    command:
+      - mlflow
+      - server
+      - --host=0.0.0.0
+      - --port=5001
+      - --backend-store-uri=sqlite:////mlflow/mlflow.db
+      - --artifacts-destination=/mlflow/mlartifacts
+      # MLflow rejects unknown Host headers: the browser, host scripts and the api.
+      - --allowed-hosts=localhost:5001,127.0.0.1:5001,mlflow:5001
+    ports:
+      - "127.0.0.1:5001:5001"
+    volumes:
+      # Runs, registry and model files live in ./mlflow on the host and survive
+      # container restarts. Clients upload and download through the server.
+      - ./mlflow:/mlflow
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5001/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    <<: *image
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5001
+      REGISTERED_MODEL_NAME: trip-duration
+      MODEL_ALIAS: production
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
