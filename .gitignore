@@ -171,6 +171,6 @@ cython_debug/
 data/raw/*
 !data/raw/.gitkeep
 artifacts/
-mlflow.db
-mlartifacts/
+# MLflow server data (database + model files), created by docker compose
+/mlflow/
 mlruns/

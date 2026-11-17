@@ -1,0 +1,9 @@
+# Allowlist: the image needs only the locked dependencies and the two packages.
+# Data, MLflow files, .env and notebooks never enter the build context.
+**
+!pyproject.toml
+!uv.lock
+!src/
+!src/**/*.py
+!app/
+!app/*.py

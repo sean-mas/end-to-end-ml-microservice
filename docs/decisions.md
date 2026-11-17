@@ -105,3 +105,17 @@ Each choice made while building this project, why it was made, and what was not 
 - **Decision:** API tests use a fake model and run in CI. Five behaviour tests (longer trips take longer, rush hour is slower, the minute of pickup doesn't matter, predictions stay in range, the API matches the model) load the real production model and are marked `integration`.
 - **Why:** The real model lives in a local MLflow registry that CI can't reach. The fast tests guard the code; the behaviour tests guard the model.
 - **Not picked:** Training a toy model in CI, which would test a model nobody serves.
+
+## Running it
+
+### 17. Docker Compose runs both MLflow and the API from one image
+
+- **Decision:** One Dockerfile, two services. `mlflow` stores its database and model files in `./mlflow` on the host. `api` reaches it at `http://mlflow:5001` and starts only once MLflow is healthy. Training runs on the host and logs to the same server.
+- **Why:** One `docker compose up` brings up the whole service. A shared image keeps the MLflow client and server on the same version. Serving artifacts through the server means the API needs only an address, with no shared folders.
+- **Not picked:** The official MLflow image (a second version to keep in step), or baking the model into the API image (every new model would need a rebuild).
+
+### 18. The API runs as a non-root user; ports are bound to this machine only
+
+- **Decision:** The image runs as user `app`, and both ports are published on `127.0.0.1`. The MLflow service runs as root so it can create `./mlflow` on any host.
+- **Why:** The API is the part that takes outside requests, so it gets the fewest rights. Binding to `127.0.0.1` keeps MLflow, which has no login, off the local network.
+- **Not picked:** Running everything as root, or publishing ports on all interfaces.

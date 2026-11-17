@@ -21,3 +21,31 @@ jobs:
         # Tests use small hand-made data and a fake model, so CI needs no
         # download and no MLflow server.
         run: uv run pytest -v
+
+  docker:
+    # The image builds, MLflow starts, and the API starts too. With an empty
+    # registry the API must stay up and say why it has no model (503), not crash.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker compose build
+      - name: Start MLflow
+        run: docker compose up -d --wait mlflow
+      - name: Start the API without a model
+        run: |
+          docker compose up -d --no-deps api
+          for i in $(seq 1 30); do
+            code=$(curl -s -o health.json -w "%{http_code}" http://127.0.0.1:8000/health || true)
+            [ "$code" != "000" ] && break
+            sleep 2
+          done
+          cat health.json
+          test "$code" = "503"
+          grep -q '"status":"unavailable"' health.json
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop
+        if: always()
+        run: docker compose down -v
