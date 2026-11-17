@@ -1,6 +1,7 @@
 [project]
-name = "mle-model-deployment-project"
+name = "end-to-end-ml-microservice"
 version = "0.1.0"
+description = "From a raw public dataset to a deployed ML microservice: MLflow experiments, a promoted model and a FastAPI service in Docker."
 requires-python = ">=3.13.17"
 dependencies = [
     "click>=8.5.0",
@@ -21,6 +22,17 @@ dependencies = [
     "uvicorn[standard]>=0.54.0",
 ]
 
+[project.scripts]
+trip-duration = "trip_duration.cli:cli"
+
+[build-system]
+requires = ["uv_build>=0.13.5,<0.14"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+# The importable package is trip_duration (src/trip_duration).
+module-name = "trip_duration"
+
 [dependency-groups]
 dev = [
     "httpx2>=2.13.1",
@@ -28,7 +40,16 @@ dev = [
     "ipywidgets>=8.1.9",
     "nbformat>=5.11.1",
     "pytest>=9.1.1",
+    "ruff>=0.17.3",
 ]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# The API package (app/) sits at the repo root next to src/.
+pythonpath = ["."]
+
+[tool.ruff.lint]
+extend-select = ["I", "B", "UP"]
 
 [tool.uv]
 required-version = ">=0.13.5"
