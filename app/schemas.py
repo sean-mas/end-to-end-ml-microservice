@@ -25,7 +25,10 @@ class TripRequest(BaseModel):
     trip_distance: float = Field(
         ge=config.MIN_DISTANCE_MILES,
         le=config.MAX_DISTANCE_MILES,
-        description="Planned trip distance in miles (0.1-100), e.g. from a routing app.",
+        description=(
+            "Trip distance in miles (0.1-100). The model learned from distances "
+            "actually driven; at booking time send a routing app's estimate."
+        ),
         examples=[2.4],
     )
     pickup_datetime: datetime = Field(

@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
 import skops.io as sio
+from matplotlib.figure import Figure
 from sklearn.metrics import mean_absolute_error, root_mean_squared_error
 from sklearn.pipeline import Pipeline
 
@@ -58,7 +59,7 @@ def fit_and_score(model: Pipeline, data: Dataset) -> dict[str, float]:
     }
 
 
-def prediction_plot(model: Pipeline, data: Dataset):
+def prediction_plot(model: Pipeline, data: Dataset) -> Figure:
     """Scatter of predicted vs actual minutes on a sample of validation trips."""
     sample = data.X_val.sample(
         min(PLOT_SAMPLE, len(data.X_val)), random_state=config.RANDOM_STATE
@@ -86,6 +87,14 @@ def _own_types(model: Pipeline) -> list[str]:
     return [n for n in untrusted if n.startswith(("sklearn.", "trip_duration."))]
 
 
+@dataclass(frozen=True)
+class RunResult:
+    """What one logged run produced."""
+
+    run_id: str
+    metrics: dict[str, float]
+
+
 def log_run(
     name: str,
     model: Pipeline,
@@ -93,8 +102,8 @@ def log_run(
     params: dict,
     tags: dict,
     save_model: bool = True,
-) -> str:
-    """Fit, score and log one run; return its run ID."""
+) -> RunResult:
+    """Fit, score and log one run; return its run ID and scores."""
     with mlflow.start_run(run_name=name, nested=mlflow.active_run() is not None):
         mlflow.set_tags(tags)
         mlflow.log_params(params)
@@ -120,4 +129,4 @@ def log_run(
             metrics["fit_seconds"],
             metrics["model_mb"],
         )
-        return mlflow.active_run().info.run_id
+        return RunResult(mlflow.active_run().info.run_id, metrics)

@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/sean-mas/end-to-end-ml-microservice/actions/workflows/ci.yml/badge.svg)](https://github.com/sean-mas/end-to-end-ml-microservice/actions/workflows/ci.yml)
 
-From a raw public dataset to a deployed prediction service, with every step tracked, tested and reproducible. The project downloads 3.5 million New York taxi trips, cleans them, compares 25 model runs in MLflow, promotes the winner in the MLflow model registry, and serves it from a FastAPI microservice in Docker. The service answers one question: **how long will this taxi trip take?**
+From a raw public dataset to a deployed prediction service, with every step tracked, tested and reproducible. The project downloads 3.5 million New York taxi trips, cleans them, compares 24 model runs in MLflow, promotes the winner in the MLflow model registry, and serves it from a FastAPI microservice in Docker. The service answers one question: **how long will this taxi trip take?**
 
-**Result:** the served model predicts trip duration with an average error of **4.02 minutes** (RMSE; median miss 1.75 minutes, 86% of trips within ±5 minutes) on ten days it never saw. That is 58% better than guessing the average and 17% better than the course's reference model. The winner was picked by a rule written down before tuning: it is 0.7 seconds less accurate than the most accurate run, at 3.5× smaller size.
+**Result:** on ten days it never saw, the served model predicts trip duration with an error of **4.02 minutes** (RMSE). Half of all trips are predicted within 1.75 minutes. That beats guessing the average by 58% and the course's reference model by 17%.
 
 [Context](#context) · [Results](#results) · [Quick start](#quick-start) · [How it works](#how-it-works) · [API](#api) · [Decisions](docs/decisions.md) · [Tests](#tests-and-checks) · [Limitations](#limitations) · [Review questions](#review-questions)
 
@@ -15,9 +15,10 @@ From a raw public dataset to a deployed prediction service, with every step trac
 - **What I added:**
   - a date-based validation split (the service predicts future trips);
   - a ladder of four baselines;
-  - a model-selection rule fixed before tuning;
+  - a model-selection rule set before tuning ran, which trades 0.7 seconds of accuracy for a 3.5× smaller model;
   - promotion through the MLflow model registry;
   - an API that reports which model version answered;
+  - a detailed evaluation of the served model, including where it fails;
   - behaviour tests on the real model;
   - Docker Compose for MLflow and the API;
   - CI that builds and starts the containers.
@@ -32,15 +33,15 @@ From a raw public dataset to a deployed prediction service, with every step trac
 | Always guess the average | 9.65 | – | The bar any model must clear |
 | Linear regression, one-hot route + distance | 4.83 | 0.5 MB | The course's reference model |
 | Random Forest, zones + distance | 4.63 | 125 MB | A model that can learn non-linear patterns |
-| + pickup hour and weekday | 4.11 | 129 MB | Rush hour: the biggest single gain |
+| + pickup hour and weekday | 4.11 | 129 MB | Rush hour: the biggest gain among the forests |
 | Best of 20 Optuna trials | 4.005 | 667 MB | Tuning |
 | **Selected and served (trial-16)** | **4.017** | **190 MB** | Smallest model within 3 seconds of the best |
 
-Validation is 22 to 31 January (1,167,015 trips); training is 1 to 21 January (2,158,857 trips).
+Validation is 22 to 31 January (1,167,015 trips); training is 1 to 21 January (2,158,857 trips). The comparison holds 24 runs: 4 baselines and 20 tuning trials.
 
 ### The selection rule
 
-The lowest validation RMSE wins, but runs within 0.05 minutes (3 seconds) of the best count as tied, and the smallest of them wins. Ten runs tied. A rider can't notice 0.7 seconds, but a model a third the size loads faster and uses less memory in the container.
+Set before the tuning ran: the lowest validation RMSE wins, but runs within 0.05 minutes (3 seconds) of the best count as tied, and the smallest of them wins. Ten runs tied. A rider can't notice 0.7 seconds, but a model a third the size loads faster and uses less memory in the container.
 
 ![Validation RMSE against model size for all runs, with the tie band shaded and the selected model circled](docs/images/model_selection.png)
 
@@ -50,6 +51,8 @@ The lowest validation RMSE wins, but runs within 0.05 minutes (3 seconds) of the
 
 ### How good is the served model?
 
+From [notebooks/02-evaluate.ipynb](notebooks/02-evaluate.ipynb), or `uv run trip-duration evaluate`:
+
 | Check (validation days) | Result |
 |---|---|
 | Variation explained (R²) | 0.83 |
@@ -57,10 +60,13 @@ The lowest validation RMSE wins, but runs within 0.05 minutes (3 seconds) of the
 | Trips within ±5 minutes | 86% |
 | Gap between training and validation error | 0.26 min (little overfitting) |
 | Error per day | 3.54 to 4.21 min (stable) |
-| Prediction time | 14 ms for one trip |
+| Prediction time | about 15 ms for one trip (on a laptop) |
 
 Where it is weaker:
-- **Long trips:** it underestimates trips of 45 to 60 minutes by about 11 minutes.
+- **Long trips:** it pulls extreme trips towards the middle. Trips of 45 to 60 minutes come out about 11 minutes short.
+
+![Average error by actual trip length: short trips predicted slightly too long, long trips up to 11 minutes too short](docs/images/error_by_trip_length.png)
+
 - **Airport trips:** it misses them by 4.7 minutes on average, against 2.5 minutes for other trips.
 - **Late January:** it predicts 0.5 minutes too short on average, because the validation days were about 6% slower than the training days. A random split would have hidden this.
 
@@ -87,14 +93,14 @@ MLflow is now at http://127.0.0.1:5001. It runs on port 5001 because macOS uses 
 uv run trip-duration all
 ```
 
-The run is reproducible: a fresh clone gives the same 25 runs and the same winner. Near the end you should see (after a timestamp):
+The run is reproducible: a fresh clone gives the same 24 runs and the same winner. Near the end you should see (after a timestamp):
 
 ```text
 Winner: trial-16 (val_rmse=4.017, 190 MB). Best RMSE overall: 4.005. 10 runs tied.
 Version 1 is now @production
 ```
 
-The stages also run one at a time: `trip-duration download`, `train`, `tune`, `select`, `promote`.
+The stages also run one at a time: `trip-duration download`, `train`, `tune`, `select`, `promote`. Afterwards, `trip-duration evaluate` prints the detailed quality check.
 
 **3. Start the API** and ask it about a trip:
 
@@ -109,13 +115,15 @@ curl -X POST http://127.0.0.1:8000/predict -H "Content-Type: application/json" -
 
 The interactive API docs are at http://127.0.0.1:8000/docs. Stop everything with `docker compose down`. The MLflow data stays in `./mlflow`.
 
+Without Docker for the API, `uv run uvicorn app.main:app --port 8000` serves the same model from the MLflow container.
+
 ## How it works
 
 ```mermaid
 flowchart LR
   A["NYC TLC<br>Parquet file"] -->|download| B["data/raw/"]
   B -->|"features.py<br>clean + build features"| C["train 1-21 Jan<br>validate 22-31 Jan"]
-  C -->|"train · tune · select"| D["MLflow experiment<br>25 runs"]
+  C -->|"train · tune · select"| D["MLflow experiment<br>24 compared runs"]
   D -->|promote| E["MLflow registry<br>trip-duration @production"]
   E -->|"load once at startup"| F["FastAPI service<br>/predict"]
   G["Client"] -->|"trip at booking time"| F
@@ -130,6 +138,7 @@ flowchart LR
 | Tuning | `trip-duration tune` | [tune.py](src/trip_duration/tune.py) | 20 Optuna trials as child runs in MLflow |
 | Selection | `trip-duration select` | [selection.py](src/trip_duration/selection.py) | Applies the rule, retrains and saves the winner |
 | Promotion | `trip-duration promote` | [promote.py](src/trip_duration/promote.py) | Registers the winner, sets `@production` |
+| Evaluation | `trip-duration evaluate` | [evaluate.py](src/trip_duration/evaluate.py) | Error by trip length, by day, airport vs other trips |
 | Serving | `docker compose up api` | [app/](app/) | Loads `@production`, validates requests, predicts |
 
 Every run logs the same scores (`val_rmse`, `val_mae`, `train_rmse`, `fit_seconds`, `model_mb`). Saved models also get a predicted-vs-actual plot. The API builds its features with the same `build_features` function as training, so training and serving can't drift apart.
@@ -143,12 +152,14 @@ The exploration is in [notebooks/01-explore.ipynb](notebooks/01-explore.ipynb).
 | 97.9% of trips last 1 to 60 minutes; the rest include negative durations and multi-day meters | Keep 1 to 60 minutes |
 | 2.6% of trips have zero distance, and 162 claim over 100 miles | Keep 0.1 to 100 miles |
 | Fare, tip and total are only known after the trip | Never used as features |
-| Median speed falls from 16 mph at 05:00 to about 8.5 mph from 11:00 to 18:00 | Add pickup hour and weekday |
+| Median speed falls from 16 mph at 05:00 to 8.4-9.2 mph between 08:00 and 18:00 | Add pickup hour and weekday |
 | The service predicts trips that haven't happened yet | Validate on later days, not a random sample |
 
 After cleaning, 3,325,872 of 3,475,226 trips remain (95.7%).
 
 ![Median taxi speed by pickup hour, lowest from 8:00 to 18:00](docs/images/speed_by_hour.png)
+
+![Clean trips per day, 1 to 21 January for training and 22 to 31 January for validation](docs/images/date_split.png)
 
 ## API
 
@@ -158,7 +169,7 @@ After cleaning, 3,325,872 of 3,475,226 trips remain (95.7%).
 | `POST /predict` | One trip | Predicted minutes and model version |
 | `POST /predict_batch` | Up to 1,000 trips | One prediction per trip, in request order |
 
-A trip is what a booking app knows before the ride starts:
+A trip is what a booking app knows before the ride starts (the distance being the app's route estimate):
 
 ```json
 {
@@ -175,12 +186,12 @@ Zones are NYC TLC taxi zone IDs (161 is Midtown Center, 236 is Upper East Side N
 
 | Check | Command | What it covers |
 |---|---|---|
-| Unit and API tests (61) | `uv run pytest` | Every cleaning bound, the date split, the selection rule, the download, the CLI, and every API route with a fake model |
+| Unit, API and CLI tests (60) | `uv run pytest` | Every cleaning bound, the date split, the selection rule, the evaluation figures, the download, the CLI, and every API route with a fake model |
 | Behaviour tests (5) | `uv run pytest -m integration` | The real production model: longer trips take longer, rush hour is slower than Sunday morning, the minute of pickup doesn't matter, predictions stay in range, the API matches the model |
 | Lint and format | `uv run ruff check . && uv run ruff format --check .` | Style and import order |
 | CI | GitHub Actions on every pull request | Lint, tests, and a Docker job that builds the image, starts both services, and checks the API reports 503 (not a crash) when the registry is empty |
 
-The behaviour tests need the MLflow container with a promoted model, so CI skips them.
+The behaviour tests need the MLflow container with a promoted model, so CI skips them (`uv run pytest` runs them too when MLflow is up).
 
 ## Limitations
 
@@ -193,10 +204,10 @@ The behaviour tests need the MLflow container with a promoted model, so CI skips
 ## Project structure
 
 ```text
-├── src/trip_duration/   config · data · features · models · tracking · train · tune · selection · promote · cli
+├── src/trip_duration/   config · data · features · models · tracking · train · tune · selection · promote · evaluate · cli
 ├── app/                 main.py (routes) · model.py (load once) · schemas.py (request checks)
-├── tests/               unit, API, CLI and behaviour tests
-├── notebooks/           01-explore.ipynb: why each cleaning rule exists
+├── tests/               unit, API, CLI, evaluation and behaviour tests
+├── notebooks/           01-explore.ipynb (why each cleaning rule exists) · 02-evaluate.ipynb (where the model fails)
 ├── docs/                decisions.md · course-brief.md · images/
 ├── Dockerfile           one image for MLflow and the API
 ├── docker-compose.yaml  mlflow (:5001) and api (:8000)

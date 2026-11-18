@@ -6,6 +6,7 @@ restart finds the model.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request
@@ -21,7 +22,7 @@ MAX_BATCH = 1_000  # trips per batch request
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     app.state.service = None
     app.state.load_error = None
     try:
@@ -36,7 +37,7 @@ app = FastAPI(
     title="Trip Duration API",
     description=(
         "Predicts how many minutes a New York City yellow taxi trip will take, "
-        "from pickup zone, dropoff zone, planned distance and pickup time. "
+        "from pickup zone, dropoff zone, trip distance and pickup time. "
         "Serves the model version marked `production` in the MLflow registry."
     ),
     version="1.0.0",
@@ -55,7 +56,7 @@ def _service(request: Request) -> model_module.ModelService:
 
 
 @app.get("/health", response_model=Health, tags=["health"])
-def health(request: Request):
+def health(request: Request) -> JSONResponse:
     """Say whether a model is loaded and which registry version it is."""
     service = request.app.state.service
     body = Health(
@@ -69,7 +70,7 @@ def health(request: Request):
 
 
 @app.post("/predict", response_model=Prediction, tags=["predictions"])
-def predict(trip: TripRequest, request: Request):
+def predict(trip: TripRequest, request: Request) -> Prediction:
     """Predict the duration of one trip in minutes."""
     service = _service(request)
     [minutes] = service.predict([trip])
@@ -81,7 +82,7 @@ def predict(trip: TripRequest, request: Request):
 
 
 @app.post("/predict_batch", response_model=BatchPrediction, tags=["predictions"])
-def predict_batch(trips: list[TripRequest], request: Request):
+def predict_batch(trips: list[TripRequest], request: Request) -> BatchPrediction:
     """Predict several trips at once; the answers keep the request order."""
     if len(trips) > MAX_BATCH:
         raise HTTPException(422, f"At most {MAX_BATCH} trips per request.")

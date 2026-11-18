@@ -1,10 +1,18 @@
 """Command line: `uv run trip-duration <step>`, one command per pipeline step."""
 
 import logging
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from . import config, data
+
+if TYPE_CHECKING:
+    from .tracking import Dataset
+
+# The selection chart shown in the README; `select` and `all` overwrite it.
+SELECTION_CHART = config.PROJECT_ROOT / "docs" / "images" / "model_selection.png"
 
 
 @click.group()
@@ -21,7 +29,7 @@ def download(month: str, force: bool) -> None:
     data.download(month, force=force)
 
 
-def _dataset():
+def _dataset() -> "Dataset":
     """Load, clean and split January once per command."""
     from . import tracking
 
@@ -46,11 +54,18 @@ def tune(trials: int) -> None:
 
 
 @cli.command()
-def select() -> None:
+@click.option(
+    "--chart",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=SELECTION_CHART,
+    show_default=True,
+    help="Where to save the selection chart (it is also logged to MLflow).",
+)
+def select(chart: Path) -> None:
     """Stage 3: pick the winner by the rule in docs/decisions.md, save the candidate."""
     from .selection import select as pick
 
-    run_id = pick(_dataset())
+    run_id = pick(_dataset(), chart_path=chart)
     click.echo(f"Candidate run: {run_id}")
 
 
@@ -78,6 +93,22 @@ def run_all(trials: int) -> None:
     dataset = _dataset()  # load and split once, reuse for every stage
     train_baselines(dataset)
     run_study(dataset, n_trials=trials)
-    run_id = pick(dataset)
+    run_id = pick(dataset, chart_path=SELECTION_CHART)
     version = register(run_id)
     click.echo(f"Version {version} is now @{config.setting('MODEL_ALIAS')}")
+
+
+@cli.command()
+def evaluate() -> None:
+    """Stage 5: score the production model on the validation days in detail."""
+    from .evaluate import evaluate as score
+    from .evaluate import load_production
+
+    model, version = load_production()
+    report = score(model, data.load_trips())
+    table = report.pop("by_trip_length")
+    click.echo(f"Production model: version {version}")
+    for key, value in report.items():
+        click.echo(f"  {key:<24} {value:,.3f}")
+    click.echo("\nError by actual trip length (minutes):")
+    click.echo(table.round(2).to_string())

@@ -1,9 +1,11 @@
 """Stage 1: four baseline runs, each adding one idea, logged side by side in MLflow."""
 
+from sklearn.pipeline import Pipeline
+
 from . import config, models, tracking
 
 
-def baseline_runs() -> list[tuple[str, object, dict, dict]]:
+def baseline_runs() -> list[tuple[str, Pipeline, dict, dict]]:
     """Return (run name, model, params, tags) for each baseline, simplest first."""
     return [
         (
@@ -45,6 +47,6 @@ def train_baselines(data: tracking.Dataset) -> dict[str, str]:
     """Log every baseline run and return {run name: run ID}."""
     tracking.connect()
     return {
-        name: tracking.log_run(name, model, data, params, tags)
+        name: tracking.log_run(name, model, data, params, tags).run_id
         for name, model, params, tags in baseline_runs()
     }
