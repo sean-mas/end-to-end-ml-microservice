@@ -2,13 +2,20 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from trip_duration import config
 
 
 class TripRequest(BaseModel):
-    """A trip as it is known at booking time."""
+    """A trip as it is known at booking time: where from, where to, and when.
+
+    No distance: the model looks up the typical distance between the two zones
+    itself, so callers can't send a distance the model would misread.
+    """
+
+    # Unknown fields (such as an old client's trip_distance) get a 422, not silence.
+    model_config = ConfigDict(extra="forbid")
 
     PULocationID: int = Field(
         ge=config.MIN_ZONE_ID,
@@ -21,15 +28,6 @@ class TripRequest(BaseModel):
         le=config.MAX_ZONE_ID,
         description="Dropoff taxi zone (NYC TLC zone ID, 1-265).",
         examples=[236],
-    )
-    trip_distance: float = Field(
-        ge=config.MIN_DISTANCE_MILES,
-        le=config.MAX_DISTANCE_MILES,
-        description=(
-            "Trip distance in miles (0.1-100). The model learned from distances "
-            "actually driven; at booking time send a routing app's estimate."
-        ),
-        examples=[2.4],
     )
     pickup_datetime: datetime = Field(
         description="Planned pickup time, local New York time.",

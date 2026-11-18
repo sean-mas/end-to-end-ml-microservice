@@ -28,7 +28,6 @@ class ModelService:
                 {
                     "PULocationID": t.PULocationID,
                     "DOLocationID": t.DOLocationID,
-                    "trip_distance": t.trip_distance,
                     config.PICKUP_TIME: t.pickup_datetime,
                 }
                 for t in trips

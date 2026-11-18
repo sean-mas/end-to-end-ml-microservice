@@ -10,7 +10,10 @@ from trip_duration.selection import apply_rule
 
 @pytest.fixture
 def tiny():
-    """60 trips where duration grows with distance and is slower at 17:00."""
+    """60 trips where duration grows with distance and is slower at 17:00.
+
+    X has the booking-time columns plus the driven distance, like training data.
+    """
     rng = np.random.default_rng(0)
     n = 60
     X = pd.DataFrame(
@@ -21,7 +24,7 @@ def tiny():
             "pickup_hour": rng.choice([5, 17], n),
             "pickup_weekday": rng.integers(0, 7, n),
         }
-    )[config.FEATURES]
+    )
     y = 3 * X["trip_distance"] + np.where(X["pickup_hour"] == 17, 8, 0)
     return X, y
 
@@ -40,14 +43,15 @@ def tiny():
 def test_every_model_accepts_the_full_feature_table(tiny, make):
     X, y = tiny
     model = make().fit(X, y)
-    assert model.predict(X).shape == (len(X),)
+    # Predict like the API does: booking-time columns only, no distance.
+    assert model.predict(X[config.BOOKING_FEATURES]).shape == (len(X),)
     assert models.size_mb(model) > 0
 
 
 def test_forest_learns_rush_hour(tiny):
     X, y = tiny
     model = models.random_forest(n_estimators=20, min_samples_leaf=1).fit(X, y)
-    trip = X.iloc[[0]].assign(trip_distance=3.0)
+    trip = X.iloc[[0]][config.BOOKING_FEATURES]
     assert (
         model.predict(trip.assign(pickup_hour=17))[0]
         > model.predict(trip.assign(pickup_hour=5))[0]

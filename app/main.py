@@ -37,7 +37,7 @@ app = FastAPI(
     title="Trip Duration API",
     description=(
         "Predicts how many minutes a New York City yellow taxi trip will take, "
-        "from pickup zone, dropoff zone, trip distance and pickup time. "
+        "from pickup zone, dropoff zone and pickup time, all known at booking. "
         "Serves the model version marked `production` in the MLflow registry."
     ),
     version="1.0.0",

@@ -17,7 +17,10 @@ def baseline_runs() -> list[tuple[str, Pipeline, dict, dict]]:
         (
             "linear-route-onehot",
             models.linear_route(),
-            {"model": "LinearRegression", "features": "route one-hot + distance"},
+            {
+                "model": "LinearRegression",
+                "features": "route one-hot + typical distance",
+            },
             {"stage": "baseline", "idea": "course reference model"},
         ),
         (
@@ -25,7 +28,7 @@ def baseline_runs() -> list[tuple[str, Pipeline, dict, dict]]:
             models.random_forest(config.BASE_FEATURES),
             {
                 "model": "RandomForest",
-                "features": "zones + distance",
+                "features": "zones + typical distance",
                 **models.RF_START,
             },
             {"stage": "baseline", "idea": "Random Forest, no time features"},
@@ -35,7 +38,7 @@ def baseline_runs() -> list[tuple[str, Pipeline, dict, dict]]:
             models.random_forest(config.FEATURES),
             {
                 "model": "RandomForest",
-                "features": "zones + distance + hour + weekday",
+                "features": "zones + typical distance + hour + weekday",
                 **models.RF_START,
             },
             {"stage": "baseline", "idea": "add pickup hour and weekday"},

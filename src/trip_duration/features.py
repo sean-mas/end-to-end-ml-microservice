@@ -34,16 +34,16 @@ def filter_outliers(trips: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_features(trips: pd.DataFrame) -> pd.DataFrame:
-    """Return the model's input columns, in a fixed order.
+    """Return what is known at booking time: zones, pickup hour and weekday.
 
-    Needs PULocationID, DOLocationID, trip_distance and the pickup time. The API
-    calls this with the fields of a request, so training and serving can't drift.
+    Needs PULocationID, DOLocationID and the pickup time. The API calls this with
+    the fields of a request, so training and serving can't drift.
     """
     pickup = pd.to_datetime(trips[config.PICKUP_TIME])
-    features = trips[config.BASE_FEATURES].copy()
+    features = trips[config.ZONES].copy()
     features["pickup_hour"] = pickup.dt.hour
     features["pickup_weekday"] = pickup.dt.day_of_week
-    return features[config.FEATURES]
+    return features[config.BOOKING_FEATURES]
 
 
 def add_route(features: pd.DataFrame) -> pd.DataFrame:
@@ -69,12 +69,13 @@ def split_by_date(trips: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def prepare(
     trips: pd.DataFrame,
 ) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
-    """Raw trips in; X_train, y_train, X_val, y_val out."""
+    """Raw trips in; X_train, y_train, X_val, y_val out.
+
+    X_train also carries the driven distance, which each model uses only to learn
+    typical zone-to-zone distances. X_val has booking-time columns only, exactly
+    like an API request, so validation can't benefit from the driven distance.
+    """
     clean = filter_outliers(add_duration(trips))
     train, val = split_by_date(clean)
-    return (
-        build_features(train),
-        train[config.TARGET],
-        build_features(val),
-        val[config.TARGET],
-    )
+    X_train = build_features(train).assign(trip_distance=train["trip_distance"])
+    return X_train, train[config.TARGET], build_features(val), val[config.TARGET]
