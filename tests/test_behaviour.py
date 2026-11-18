@@ -27,22 +27,24 @@ def service():
     return load_service()
 
 
+MIDTOWN, UPPER_EAST_SIDE, JFK, LAGUARDIA = 161, 236, 132, 138
+
+
 def predict(service, **trip) -> float:
     base = {
-        "PULocationID": 161,  # Midtown Center
-        "DOLocationID": 236,  # Upper East Side North
-        "trip_distance": 2.4,
+        "PULocationID": MIDTOWN,
+        "DOLocationID": UPPER_EAST_SIDE,
         config.PICKUP_TIME: "2025-01-23 17:30",  # Thursday rush hour
     }
     X = features.build_features(pd.DataFrame([{**base, **trip}]))
     return float(service.model.predict(X)[0])
 
 
-def test_longer_trips_take_longer(service):
-    """Directional: more miles, more minutes."""
-    minutes = [predict(service, trip_distance=d) for d in (1.0, 3.0, 7.0, 15.0)]
-    assert minutes == sorted(minutes)
-    assert minutes[-1] > 2 * minutes[0]
+def test_farther_destinations_take_longer(service):
+    """Directional: with no distance given, the model still knows JFK is far."""
+    nearby = predict(service, DOLocationID=UPPER_EAST_SIDE)
+    airport = predict(service, DOLocationID=JFK)
+    assert airport > 2 * nearby
 
 
 def test_rush_hour_is_slower_than_early_sunday(service):
@@ -59,10 +61,19 @@ def test_minute_of_pickup_does_not_matter(service):
     assert early == pytest.approx(late)
 
 
-def test_predictions_stay_in_a_plausible_range(service):
+@pytest.mark.parametrize(
+    ("pickup", "dropoff"),
+    [
+        (MIDTOWN, UPPER_EAST_SIDE),
+        (MIDTOWN, JFK),
+        (JFK, LAGUARDIA),
+        (MIDTOWN, MIDTOWN),
+        (264, 265),  # unknown zone to outside NYC
+    ],
+)
+def test_predictions_stay_in_a_plausible_range(service, pickup, dropoff):
     """Minimum functionality: every prediction lies inside the training range."""
-    for distance in (0.1, 1.0, 10.0, 30.0, 100.0):
-        assert 1 <= predict(service, trip_distance=distance) <= 60
+    assert 1 <= predict(service, PULocationID=pickup, DOLocationID=dropoff) <= 60
 
 
 def test_api_matches_the_registry_model(service):
@@ -70,9 +81,8 @@ def test_api_matches_the_registry_model(service):
     from app.schemas import TripRequest
 
     trip = TripRequest(
-        PULocationID=161,
-        DOLocationID=236,
-        trip_distance=2.4,
+        PULocationID=MIDTOWN,
+        DOLocationID=UPPER_EAST_SIDE,
         pickup_datetime="2025-01-23T17:30:00",
     )
     [via_api] = service.predict([trip])

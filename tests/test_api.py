@@ -5,24 +5,24 @@ from fastapi.testclient import TestClient
 
 from app import main
 from app.model import ModelService
+from trip_duration import config
 
 TRIP = {
     "PULocationID": 161,
     "DOLocationID": 236,
-    "trip_distance": 2.4,
     "pickup_datetime": "2025-01-23T17:30:00",
 }
 
 
 class FakeModel:
-    """Predicts 10 minutes per mile, and records the feature table it was given."""
+    """Predicts pickup hour + 5 minutes, and records the table it was given."""
 
     def __init__(self):
         self.seen = None
 
     def predict(self, X):
         self.seen = X
-        return X["trip_distance"].to_numpy() * 10
+        return X["pickup_hour"].to_numpy() + 5.0
 
 
 @pytest.fixture
@@ -58,30 +58,25 @@ def test_predict_returns_minutes_and_version(client):
     response = client.post("/predict", json=TRIP)
     assert response.status_code == 200
     assert response.json() == {
-        "predicted_duration_minutes": 24.0,
+        "predicted_duration_minutes": 22.0,
         "model_name": "trip-duration",
         "model_version": "7",
     }
 
 
-def test_predict_builds_the_training_features(client, fake_model):
+def test_predict_sends_only_booking_time_features(client, fake_model):
     client.post("/predict", json=TRIP)
     row = fake_model.seen.iloc[0]
-    assert list(fake_model.seen.columns) == [
-        "PULocationID",
-        "DOLocationID",
-        "trip_distance",
-        "pickup_hour",
-        "pickup_weekday",
-    ]
+    assert list(fake_model.seen.columns) == config.BOOKING_FEATURES
     assert row["pickup_hour"] == 17
     assert row["pickup_weekday"] == 3  # 23 January 2025 is a Thursday
 
 
 def test_batch_keeps_request_order(client):
-    trips = [{**TRIP, "trip_distance": d} for d in (1.0, 5.0, 2.0)]
+    times = ["2025-01-23T01:00:00", "2025-01-23T09:00:00", "2025-01-23T04:00:00"]
+    trips = [{**TRIP, "pickup_datetime": t} for t in times]
     response = client.post("/predict_batch", json=trips)
-    assert response.json()["predicted_duration_minutes"] == [10.0, 50.0, 20.0]
+    assert response.json()["predicted_duration_minutes"] == [6.0, 14.0, 9.0]
 
 
 def test_empty_batch_returns_empty_list(client):
@@ -99,8 +94,6 @@ def test_batch_size_is_limited(client):
     [
         ("PULocationID", 0),
         ("DOLocationID", 266),
-        ("trip_distance", 0.05),
-        ("trip_distance", 150),
         ("pickup_datetime", "not a date"),
     ],
 )
@@ -110,8 +103,14 @@ def test_invalid_trips_are_rejected(client, field, value):
 
 
 def test_missing_field_is_rejected(client):
-    trip = {k: v for k, v in TRIP.items() if k != "trip_distance"}
+    trip = {k: v for k, v in TRIP.items() if k != "pickup_datetime"}
     assert client.post("/predict", json=trip).status_code == 422
+
+
+def test_a_driven_distance_is_refused_not_ignored(client):
+    """Old clients that still send trip_distance learn it is no longer an input."""
+    response = client.post("/predict", json={**TRIP, "trip_distance": 2.4})
+    assert response.status_code == 422
 
 
 def test_api_starts_without_mlflow_and_says_why(client_without_model):

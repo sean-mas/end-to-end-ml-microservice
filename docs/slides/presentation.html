@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How long will this taxi trip take?</title>
+<!-- Source of docs/presentation.pdf. Rebuild with:
+     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new \
+       --no-pdf-header-footer --print-to-pdf=docs/presentation.pdf docs/slides/presentation.html -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --bg: #151c26; --panel: #1d2633; --ink: #f2efe8; --muted: #a7b1bf;
+    --accent: #f5b301; --good: #7cc48a; --bad: #ef8a5a; --line: #2c3746;
+    --display: "Space Grotesk", system-ui, sans-serif;
+    --body: "Inter", system-ui, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+  @page { size: 1280px 720px; margin: 0; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--bg); }
+  body { font-family: var(--body); color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1280px; height: 720px; padding: 64px 80px; position: relative; overflow: hidden;
+           page-break-after: always; break-after: page; display: flex; flex-direction: column; gap: 28px; }
+  .slide:last-child { page-break-after: auto; break-after: auto; }
+  .eyebrow { font-family: var(--display); font-weight: 600; font-size: 20px; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+  .bar { width: 100px; height: 6px; border-radius: 3px; background: var(--accent); }
+  h1 { font-family: var(--display); font-weight: 700; font-size: 64px; line-height: 1.08; margin: 0; }
+  h2 { font-family: var(--display); font-weight: 700; font-size: 40px; line-height: 1.15; margin: 0; }
+  h3 { font-family: var(--display); font-weight: 600; font-size: 22px; margin: 0 0 10px; color: var(--accent); }
+  p, li { font-size: 22px; line-height: 1.45; margin: 0; }
+  .muted { color: var(--muted); }
+  .sub { font-size: 28px; color: var(--muted); }
+  ul { margin: 0; padding-left: 1.1em; display: flex; flex-direction: column; gap: 10px; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 48px; flex: 1; min-height: 0; }
+  .cols.wide-right { grid-template-columns: 0.85fr 1.15fr; }
+  .card { background: #fff; border-radius: 10px; padding: 10px; align-self: center; }
+  .card img { max-width: 100%; max-height: 100%; display: block; }
+  .shot { border-radius: 10px; border: 1px solid var(--line); max-width: 100%; display: block; }
+  .footer { position: absolute; left: 80px; right: 80px; bottom: 28px; display: flex; justify-content: space-between; font-size: 15px; color: var(--muted); }
+  table { border-collapse: collapse; width: 100%; font-size: 20px; }
+  td, th { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; }
+  th { font-family: var(--display); font-weight: 600; font-size: 15px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tr.win td { color: var(--accent); font-weight: 600; }
+  .big { font-family: var(--display); font-weight: 700; font-size: 84px; line-height: 1; }
+  .flow { display: flex; align-items: stretch; gap: 14px; }
+  .step { flex: 1; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 16px 18px; display: flex; flex-direction: column; gap: 6px; }
+  .step .n { font-family: var(--mono); font-size: 14px; color: var(--accent); }
+  .step .t { font-family: var(--display); font-weight: 600; font-size: 22px; }
+  .step .d { font-size: 16px; color: var(--muted); line-height: 1.4; }
+  .arrow { align-self: center; color: var(--accent); font-size: 28px; }
+  pre { font-family: var(--mono); font-size: 16px; line-height: 1.5; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin: 0; white-space: pre-wrap; }
+  .k { color: var(--accent); }
+  .pill { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 16px; font-weight: 600; }
+  .pill.bad { background: rgba(239,138,90,.18); color: var(--bad); }
+  .pill.good { background: rgba(124,196,138,.18); color: var(--good); }
+  .versus { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+  .v { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 22px 24px; display: flex; flex-direction: column; gap: 10px; }
+  .v .score { font-family: var(--display); font-weight: 700; font-size: 52px; }
+  .v p { font-size: 19px; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; }
+  .stat .val { font-family: var(--display); font-weight: 700; font-size: 38px; }
+  .stat .lbl { font-size: 16px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- 1 -->
+<section class="slide" style="justify-content:center">
+  <div class="bar"></div>
+  <div class="eyebrow">Model deployment project · Spiced Academy MLE</div>
+  <h1>How long will this<br>taxi trip take?</h1>
+  <p class="sub">From raw trip data to a deployed ML microservice<br>with MLflow, FastAPI and Docker</p>
+  <p class="muted" style="position:absolute;left:80px;bottom:64px;font-size:20px">Sean Kress · November 2026</p>
+</section>
+
+<!-- 2 -->
+<section class="slide">
+  <div class="eyebrow">The brief, and what I added</div>
+  <h2>Predict trip duration, track it, serve it</h2>
+  <div class="cols">
+    <div>
+      <h3>The brief</h3>
+      <ul>
+        <li>January 2025 NYC Yellow Taxi trips: 3.5 million rides</li>
+        <li>Train a Random Forest, measure RMSE</li>
+        <li>Track experiments in MLflow</li>
+        <li>Serve predictions with FastAPI</li>
+        <li>Bonus: tests and hyperparameter tuning</li>
+      </ul>
+    </div>
+    <div>
+      <h3>What I added</h3>
+      <ul>
+        <li>Only information known <b>at booking time</b>, which meant catching a leak</li>
+        <li>Validation on <b>later days</b>, not a random sample</li>
+        <li>A selection rule set <b>before</b> tuning</li>
+        <li>Promotion through the MLflow model registry</li>
+        <li>Docker Compose, CI and behaviour tests</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>2</span></div>
+</section>
+
+<!-- 3 -->
+<section class="slide">
+  <div class="eyebrow">How it works</div>
+  <h2>Five steps from a raw file to a live API</h2>
+  <div class="flow">
+    <div class="step"><span class="n">download</span><span class="t">Data</span><span class="d">TLC Parquet file, 3.5 M trips, saved once</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">features.py</span><span class="t">Clean</span><span class="d">1–60 min, valid zones; train 1–21 Jan, validate 22–31 Jan</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">train · tune</span><span class="t">Compare</span><span class="d">4 baselines + 20 Optuna trials, all in MLflow</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">select · promote</span><span class="t">Registry</span><span class="d">Winner by rule, marked @production</span></div>
+    <div class="arrow">→</div>
+    <div class="step"><span class="n">docker compose</span><span class="t">Serve</span><span class="d">FastAPI loads @production once, answers /predict</span></div>
+  </div>
+  <div class="cols" style="grid-template-columns:1fr 1fr;gap:40px">
+    <div>
+      <h3>Built to be trusted</h3>
+      <ul>
+        <li>Training and API share one feature function</li>
+        <li>The API names the model version in every answer</li>
+        <li>A fresh clone reproduces the same winner</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Stack</h3>
+      <ul>
+        <li>scikit-learn · Optuna · MLflow registry</li>
+        <li>FastAPI · Pydantic · Docker Compose</li>
+        <li>uv · pytest · ruff · GitHub Actions</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>3</span></div>
+</section>
+
+<!-- 4 -->
+<section class="slide">
+  <div class="eyebrow">What the data needed</div>
+  <h2>Rush hour halves the speed</h2>
+  <div class="cols wide-right">
+    <ul>
+      <li><b>98%</b> of trips last 1–60 min; the rest are errors like negative durations</li>
+      <li>Fare, tip and total are only known <b>after</b> the trip: never features</li>
+      <li>Median speed: <b>16 mph</b> at 05:00, <b>8–9 mph</b> from 08:00 to 18:00, so pickup hour and weekday become features</li>
+      <li>3,475,226 → 3,325,872 clean trips</li>
+    </ul>
+    <div class="card"><img src="../images/speed_by_hour.png" alt="Median speed by pickup hour"></div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>4</span></div>
+</section>
+
+<!-- 5 -->
+<section class="slide">
+  <div class="eyebrow">Comparing models in MLflow</div>
+  <h2>24 runs, one rule picks the winner</h2>
+  <div class="cols" style="grid-template-columns:0.9fr 1.1fr;gap:36px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <table>
+        <tr><th>Run</th><th class="num">RMSE</th><th class="num">Size</th></tr>
+        <tr><td>Guess the average</td><td class="num">9.65</td><td class="num">–</td></tr>
+        <tr><td>Course linear model</td><td class="num">5.16</td><td class="num">1 MB</td></tr>
+        <tr><td>Forest: zones + distance</td><td class="num">5.18</td><td class="num">29 MB</td></tr>
+        <tr><td>+ hour and weekday</td><td class="num">4.68</td><td class="num">121 MB</td></tr>
+        <tr><td>Best Optuna trial</td><td class="num">4.610</td><td class="num">575 MB</td></tr>
+        <tr class="win"><td>Selected: trial-16</td><td class="num">4.619</td><td class="num">159 MB</td></tr>
+      </table>
+      <p style="font-size:19px"><b>Rule, set before tuning:</b> lowest error wins, but within 3 seconds of the best, the <b>smallest</b> model wins. Half a second less accurate, 3.6× smaller.</p>
+    </div>
+    <div class="card"><img src="../images/model_selection.png" alt="Validation RMSE against model size"></div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>5</span></div>
+</section>
+
+<!-- 6 -->
+<section class="slide">
+  <div class="eyebrow">Catching a leak</div>
+  <h2>The distance column knew the answer</h2>
+  <div class="cols" style="grid-template-columns:1fr 1fr;gap:36px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+      <div class="versus">
+        <div class="v"><span class="pill bad">Version 1 · retired</span><span class="score">4.02</span><p>Used the distance <b>actually driven</b>, only known after the trip</p></div>
+        <div class="v"><span class="pill good">Version 2 · production</span><span class="score" style="color:var(--accent)">4.62</span><p>Uses the <b>typical distance</b> between the two zones, learned from training trips</p></div>
+      </div>
+      <ul>
+        <li>Typical distance is within 0.27 miles for half of all trips</li>
+        <li>The honest price: 0.6 minutes of error</li>
+        <li>The API now takes only zones and pickup time</li>
+      </ul>
+    </div>
+    <div style="display:flex;flex-direction:column;justify-content:center;gap:12px"><img class="shot" src="registry_versions.png" alt="MLflow registry with version 2 in production and version 1 retired"><p class="muted" style="font-size:16px">MLflow model registry: version 1 stays visible, tagged with why it was retired.</p></div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>6</span></div>
+</section>
+
+<!-- 7 -->
+<section class="slide">
+  <div class="eyebrow">The service</div>
+  <h2>Ask it about a trip</h2>
+  <div class="cols" style="grid-template-columns:1.05fr 0.95fr;gap:36px">
+    <div style="display:flex;flex-direction:column;gap:18px">
+<pre><span class="k">$</span> docker compose up -d --wait
+<span class="k">$</span> curl -X POST localhost:8000/predict -d '{
+    "PULocationID": 161,
+    "DOLocationID": 236,
+    "pickup_datetime": "2025-01-23T17:30:00" }'
+
+{"predicted_duration_minutes": 13.75,
+ "model_name": "trip-duration", "model_version": "2"}</pre>
+      <table>
+        <tr><th>Trip</th><th class="num">Minutes</th></tr>
+        <tr><td>Midtown → Upper East Side, Thu 17:30</td><td class="num">13.8</td></tr>
+        <tr><td>Same trip, Sun 05:30</td><td class="num">8.1</td></tr>
+        <tr><td>Midtown → JFK, Thu 17:30</td><td class="num">54.0</td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>Checked at every level</h3>
+      <ul>
+        <li><b>67 tests</b> in CI: cleaning bounds, distance lookup, selection rule, every API route</li>
+        <li><b>9 behaviour tests</b> on the real model: farther is longer, rush hour is slower</li>
+        <li>CI builds the Docker image and starts both services</li>
+        <li>Bad input gets a clear 422; no model gets a 503, not a crash</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice</span><span>7</span></div>
+</section>
+
+<!-- 8 -->
+<section class="slide">
+  <div class="eyebrow">How good, and what's next</div>
+  <h2>Reliable for everyday trips, weak at the extremes</h2>
+  <div class="stats">
+    <div class="stat"><div class="val">4.62</div><div class="lbl">minutes RMSE on unseen days</div></div>
+    <div class="stat"><div class="val">2.3</div><div class="lbl">minutes median miss</div></div>
+    <div class="stat"><div class="val">82%</div><div class="lbl">of trips within ±5 minutes</div></div>
+    <div class="stat"><div class="val">52%</div><div class="lbl">better than guessing the average</div></div>
+  </div>
+  <div class="cols" style="grid-template-columns:1.15fr 0.85fr;gap:36px">
+    <div class="card"><img src="../images/error_by_trip_length.png" alt="Average error by actual trip length"></div>
+    <div>
+      <h3>Next</h3>
+      <ul>
+        <li>A routing estimate per trip instead of the typical distance</li>
+        <li>Gradient boosting: smaller and often more accurate</li>
+        <li>Watch for drift: late January was already 6% slower</li>
+        <li>Check on February</li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer"><span>End-to-End ML Microservice · github.com/sean-mas/end-to-end-ml-microservice</span><span>8</span></div>
+</section>
+
+</body>
+</html>

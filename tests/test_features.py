@@ -84,7 +84,7 @@ def test_trips_outside_january_are_dropped(pickup, kept):
 def test_build_features_columns_and_time_parts():
     # 2025-01-10 is a Friday (weekday 4).
     X = features.build_features(make_trips([{"pickup": "2025-01-10 17:45"}]))
-    assert list(X.columns) == config.FEATURES
+    assert list(X.columns) == config.BOOKING_FEATURES
     assert X["pickup_hour"].iloc[0] == 17
     assert X["pickup_weekday"].iloc[0] == 4
 
@@ -131,3 +131,17 @@ def test_prepare_returns_aligned_sets():
     X_train, y_train, X_val, y_val = features.prepare(trips)
     assert len(X_train) == len(y_train) == 1
     assert len(X_val) == len(y_val) == 1
+
+
+def test_build_features_never_uses_the_driven_distance():
+    X = features.build_features(make_trips([{"miles": 7.5}]))
+    assert "trip_distance" not in X.columns
+
+
+def test_prepare_gives_driven_distance_to_training_only():
+    """Training needs it to learn typical distances; validation must look like
+    an API request."""
+    trips = make_trips([{"pickup": "2025-01-05 09:00"}, {"pickup": "2025-01-25 09:00"}])
+    X_train, _, X_val, _ = features.prepare(trips)
+    assert "trip_distance" in X_train.columns
+    assert list(X_val.columns) == config.BOOKING_FEATURES

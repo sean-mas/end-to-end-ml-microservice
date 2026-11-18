@@ -26,9 +26,9 @@ Each choice made while building this project, why it was made, and what was not 
 
 ### 4. Only features known when the trip is booked
 
-- **Decision:** Pickup zone, dropoff zone, trip distance, pickup hour and pickup weekday.
-- **Why:** Fare, tip, tolls and total are only known after the trip ends. A model that uses them would look good in testing and be useless in the API. One compromise remains: training uses the distance actually driven, while the API receives a planned distance from the booking app. The README lists this as the main limitation.
-- **Not picked:** Every column in the file.
+- **Decision:** Pickup zone, dropoff zone, pickup hour and pickup weekday, plus the typical distance between the two zones (decision 19).
+- **Why:** Fare, tip, tolls and total are only known after the trip ends, and so is the recorded `trip_distance`, which is the distance actually driven. A model that uses them looks good in testing and is useless at booking time.
+- **Not picked:** Every column in the file, or the driven distance (version 1 of the model, now retired).
 
 ### 5. Keep trips of 1-60 minutes and 0.1-100 miles in valid zones
 
@@ -52,8 +52,8 @@ Each choice made while building this project, why it was made, and what was not 
 
 ### 8. A ladder of four baselines before any tuning
 
-- **Decision:** Log four runs, each adding one idea: always guess the average, the course's linear model on one-hot routes, a Random Forest on zones and distance, then the same forest plus hour and weekday.
-- **Why:** Each step shows what one idea is worth. The ladder also proves the forest earns its size: the course's linear model is 0.5 MB.
+- **Decision:** Log four runs, each adding one idea: always guess the average, the course's linear model on one-hot routes, a Random Forest on zones and typical distance, then the same forest plus hour and weekday.
+- **Why:** Each step shows what one idea is worth. The ladder also proves the forest earns its size: the course's linear model is 0.9 MB, and a forest on zones and distance alone is no better than it. Only the time features make the forest worth having.
 - **Not picked:** Tuning straight away, which would hide where the gain comes from.
 
 ### 9. The forest starts with leaves of at least 50 trips
@@ -85,7 +85,7 @@ Each choice made while building this project, why it was made, and what was not 
 ### 13. The API loads the model once at startup, by alias
 
 - **Decision:** At startup the API loads `models:/trip-duration@production` from the MLflow registry and keeps it in memory. `/health` and every answer name the version.
-- **Why:** A 190 MB model takes about a second to load, which would be added to every request if loaded per call. Loading by alias means promoting a new version needs only an API restart, not a code change.
+- **Why:** A 159 MB model takes about a second to load, which would be added to every request if loaded per call. Loading by alias means promoting a new version needs only an API restart, not a code change.
 - **Not picked:** Loading per request (the course demo), or copying a model file into the image.
 
 ### 14. The API starts even when MLflow is down
@@ -96,13 +96,13 @@ Each choice made while building this project, why it was made, and what was not 
 
 ### 15. Requests are checked against the training ranges
 
-- **Decision:** Zones must be 1-265 and distance 0.1-100 miles, the same bounds as the cleaning rule. Anything else gets a 422 before the model sees it.
-- **Why:** The model has never seen trips outside these ranges, so its answer there would be a guess dressed up as a prediction.
+- **Decision:** Zones must be 1-265, the same bounds as the cleaning rule, and unknown fields are refused. Anything else gets a 422 before the model sees it.
+- **Why:** The model has never seen zones outside this range, so its answer there would be a guess dressed up as a prediction. Refusing unknown fields means a client that still sends `trip_distance` hears that it is no longer used.
 - **Not picked:** Clamping out-of-range values to the nearest bound and predicting anyway, which hides bad input from the caller.
 
 ### 16. Behaviour tests run on the real model, outside CI
 
-- **Decision:** API tests use a fake model and run in CI. Five behaviour tests (longer trips take longer, rush hour is slower, the minute of pickup doesn't matter, predictions stay in range, the API matches the model) load the real production model and are marked `integration`.
+- **Decision:** API tests use a fake model and run in CI. Nine behaviour tests (farther destinations take longer, rush hour is slower, the minute of pickup doesn't matter, predictions stay in range for five zone pairs, the API matches the model) load the real production model and are marked `integration`.
 - **Why:** The real model lives in a local MLflow registry that CI can't reach. The fast tests guard the code; the behaviour tests guard the model.
 - **Not picked:** Training a toy model in CI, which would test a model nobody serves.
 
@@ -119,3 +119,11 @@ Each choice made while building this project, why it was made, and what was not 
 - **Decision:** The image runs as user `app`, and both ports are published on `127.0.0.1`. The MLflow service runs as root so it can create `./mlflow` on any host.
 - **Why:** The API is the part that takes outside requests, so it gets the fewest rights. Binding to `127.0.0.1` keeps MLflow, which has no login, off the local network.
 - **Not picked:** The non-root user for the MLflow service too (on Linux it can't create `./mlflow` on a fresh clone), or publishing ports on all interfaces.
+
+## Fixing a leak
+
+### 19. Replace the driven distance with the typical zone-to-zone distance, and retire version 1
+
+- **Decision:** Every model starts with a step (`ZonePairDistance`) that learns the median driven distance for each pickup-dropoff zone pair from the training trips, adds it as `typical_distance`, and drops the driven distance. Unseen pairs fall back to the pickup zone's median, then to the overall median. The API takes zones and pickup time only. Version 1, trained on the driven distance, stays in the registry tagged "retired: distance leak", and its runs stay in the `trip-duration` experiment.
+- **Why:** The recorded distance is only known after the trip, so version 1's 4.02-minute error could never be reached at booking time. The typical distance is within 0.27 miles of the driven one for half of all trips (correlation 0.96) and costs 0.6 minutes of RMSE (4.62). Learning it inside the pipeline keeps it fitted on training days only and saved with the model, so the API needs no extra file. Keeping version 1 visible shows what changed and why.
+- **Not picked:** Asking the caller for a planned distance (the model would learn from one kind of distance and be served another), a routing service (a second external dependency, listed as the next step), or deleting version 1 (hides the history).

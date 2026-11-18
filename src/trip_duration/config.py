@@ -41,13 +41,20 @@ PERIOD_END = "2025-02-01"  # exclusive
 
 # --- Features -----------------------------------------------------------------------
 # Only what is known when a trip is booked. Fare, tip and total are known only after
-# the trip, so using them would leak the answer into the model.
+# the trip, and so is the distance actually driven: using them would leak the answer
+# into the model. The driven distance is used once, to learn the typical distance
+# between two zones (transformers.ZonePairDistance), and is then dropped.
 TARGET = "duration_minutes"
 PICKUP_TIME = "tpep_pickup_datetime"
 DROPOFF_TIME = "tpep_dropoff_datetime"
-# Zone IDs go in as plain numbers: trees split on them directly, so no one-hot needed.
-BASE_FEATURES = ["PULocationID", "DOLocationID", "trip_distance"]
+ZONES = ["PULocationID", "DOLocationID"]
 TIME_FEATURES = ["pickup_hour", "pickup_weekday"]  # weekday: Monday=0 ... Sunday=6
+# What the API receives: zones and pickup time.
+BOOKING_FEATURES = [*ZONES, *TIME_FEATURES]
+# Added inside every model pipeline from the zones (median of training trips).
+TYPICAL_DISTANCE = "typical_distance"
+# Zone IDs go in as plain numbers: trees split on them directly, so no one-hot needed.
+BASE_FEATURES = [*ZONES, TYPICAL_DISTANCE]
 FEATURES = [*BASE_FEATURES, *TIME_FEATURES]
 ROUTE_FEATURE = "trip_route"  # "PU_DO" string, used by the one-hot comparison run
 
@@ -57,7 +64,7 @@ RANDOM_STATE = 42
 # Port 5001, not 5000: macOS uses 5000 for AirPlay Receiver.
 MLFLOW_DEFAULTS = {
     "MLFLOW_TRACKING_URI": "http://127.0.0.1:5001",
-    "MLFLOW_EXPERIMENT": "trip-duration",
+    "MLFLOW_EXPERIMENT": "trip-duration-booking-time",
     "REGISTERED_MODEL_NAME": "trip-duration",
     "MODEL_ALIAS": "production",
 }

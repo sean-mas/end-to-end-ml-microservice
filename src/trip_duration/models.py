@@ -1,7 +1,8 @@
 """Model recipes. Each one is a full sklearn Pipeline that takes build_features output.
 
-Because every pipeline picks its own columns, the API can always send the same
-feature table, whichever model is in production.
+Every pipeline starts by adding the typical zone-to-zone distance and then picks
+its own columns, so the API always sends the same booking-time table, whichever
+model is in production.
 """
 
 import pickle
@@ -14,6 +15,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import FunctionTransformer, OneHotEncoder
 
 from . import config, features
+from .transformers import ZonePairDistance
 
 # Starting point for the forest. sklearn's defaults (100 trees, leaves of 1 trip)
 # would need tens of GB for 2 million trips, so leaves hold at least 50 trips.
@@ -27,19 +29,25 @@ def _pick(columns: list[str]) -> ColumnTransformer:
 
 def mean_baseline() -> Pipeline:
     """Always predict the average training duration. Any model must beat this."""
-    return Pipeline([("pick", _pick(config.FEATURES)), ("model", DummyRegressor())])
+    return Pipeline(
+        [("pick", _pick(config.BOOKING_FEATURES)), ("model", DummyRegressor())]
+    )
 
 
 def linear_route() -> Pipeline:
-    """The course's reference model: one-hot pickup_dropoff route + distance."""
+    """The course's reference model: one-hot pickup_dropoff route + distance.
+
+    The typical zone-pair distance stands in for the driven distance.
+    """
     encode = ColumnTransformer(
         [
             ("route", OneHotEncoder(handle_unknown="ignore"), [config.ROUTE_FEATURE]),
-            ("distance", "passthrough", ["trip_distance"]),
+            ("distance", "passthrough", [config.TYPICAL_DISTANCE]),
         ]
     )
     return Pipeline(
         [
+            ("distance", ZonePairDistance()),
             ("add_route", FunctionTransformer(features.add_route)),
             ("encode", encode),
             ("model", LinearRegression()),
@@ -53,7 +61,13 @@ def random_forest(columns: list[str] = config.FEATURES, **params) -> Pipeline:
     forest = RandomForestRegressor(
         n_jobs=-1, random_state=config.RANDOM_STATE, **settings
     )
-    return Pipeline([("pick", _pick(columns)), ("model", forest)])
+    return Pipeline(
+        [
+            ("distance", ZonePairDistance()),
+            ("pick", _pick(columns)),
+            ("model", forest),
+        ]
+    )
 
 
 def size_mb(model: Pipeline) -> float:
