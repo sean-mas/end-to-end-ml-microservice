@@ -11,7 +11,7 @@ From a raw public dataset to a deployed prediction service, with every step trac
 ## Context
 
 - **What it is:** the final project of the model deployment module in the Machine Learning Engineering course by Spiced Academy (neuefische), built in November 2026.
-- **The brief** ([docs/course-brief.md](docs/course-brief.md)): train a `RandomForestRegressor` on the January 2025 NYC Yellow Taxi trips to predict trip duration, track experiments locally with MLflow, serve predictions with FastAPI, and send a test request. Stretch goals: tests, and hyperparameter tuning compared against the baseline.
+- **The brief:** train a `RandomForestRegressor` on the January 2025 NYC Yellow Taxi trips to predict trip duration, track experiments locally with MLflow, serve predictions with FastAPI, and send a test request. Stretch goals: tests, and hyperparameter tuning compared against the baseline.
 - **What I added:**
   - only features known at booking time. The course's distance feature is the distance actually driven, which leaks the answer. I replaced it and retired the model that used it (see [Catching a leak](#catching-a-leak-version-1-to-version-2));
   - a date-based validation split (the service predicts future trips);
@@ -222,7 +222,7 @@ The behaviour tests need the MLflow container with a promoted model, so CI skips
 ├── app/                 main.py (routes) · model.py (load once) · schemas.py (request checks)
 ├── tests/               unit, API, CLI, evaluation and behaviour tests
 ├── notebooks/           01-explore.ipynb (why each cleaning rule exists) · 02-evaluate.ipynb (where the model fails)
-├── docs/                decisions.md · presentation.pdf · presentation-notes.md · course-brief.md · images/
+├── docs/                decisions.md · presentation.pdf · presentation-notes.md · slides/ · images/
 ├── Dockerfile           one image for MLflow and the API
 ├── docker-compose.yaml  mlflow (:5001) and api (:8000)
 ├── sample-request.json  the trip used in the Quick start
