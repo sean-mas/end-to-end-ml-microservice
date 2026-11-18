@@ -66,7 +66,9 @@ def split_by_date(trips: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     )
 
 
-def prepare(trips: pd.DataFrame):
+def prepare(
+    trips: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.Series, pd.DataFrame, pd.Series]:
     """Raw trips in; X_train, y_train, X_val, y_val out."""
     clean = filter_outliers(add_duration(trips))
     train, val = split_by_date(clean)

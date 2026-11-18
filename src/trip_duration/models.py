@@ -57,7 +57,12 @@ def random_forest(columns: list[str] = config.FEATURES, **params) -> Pipeline:
 
 
 def size_mb(model: Pipeline) -> float:
-    """Return how many MB the fitted model takes when saved."""
+    """Return the model's size in MB.
+
+    Forests: the bytes of their tree arrays, which is nearly all of a saved forest.
+    Other models: the size of the pickled model. Both stay within a few percent
+    of the saved file, which is all the selection rule needs.
+    """
     estimator = model.named_steps["model"]
     if isinstance(estimator, RandomForestRegressor):
         # Counting the tree arrays is exact enough and avoids copying a large model.

@@ -27,7 +27,7 @@ Each choice made while building this project, why it was made, and what was not 
 ### 4. Only features known when the trip is booked
 
 - **Decision:** Pickup zone, dropoff zone, trip distance, pickup hour and pickup weekday.
-- **Why:** Fare, tip, tolls and total are only known after the trip ends. A model that uses them would look good in testing and be useless in the API. The distance is the planned distance a booking app would send.
+- **Why:** Fare, tip, tolls and total are only known after the trip ends. A model that uses them would look good in testing and be useless in the API. One compromise remains: training uses the distance actually driven, while the API receives a planned distance from the booking app. The README lists this as the main limitation.
 - **Not picked:** Every column in the file.
 
 ### 5. Keep trips of 1-60 minutes and 0.1-100 miles in valid zones
@@ -39,14 +39,14 @@ Each choice made while building this project, why it was made, and what was not 
 ### 6. Pickup hour and weekday as features
 
 - **Decision:** Add the pickup hour (0-23) and weekday (Monday = 0) as numbers.
-- **Why:** The median speed drops from 16 mph at 05:00 to about 8.5 mph from 11:00 to 18:00, and weekdays are slower than Sundays. Both are known at booking.
+- **Why:** The median speed drops from 16 mph at 05:00 to 8.4-9.2 mph between 08:00 and 18:00, and weekdays are slower than Sundays. Both are known at booking.
 - **Not picked:** Holidays or weather. They would need a second data source, which the brief doesn't ask for.
 
 ## Experiments and model choice
 
 ### 7. MLflow server with SQLite and served artifacts, on port 5001
 
-- **Decision:** `mlflow server --backend-store-uri sqlite:///mlflow.db --artifacts-destination ./mlartifacts --port 5001`.
+- **Decision:** `mlflow server --backend-store-uri sqlite:////mlflow/mlflow.db --artifacts-destination /mlflow/mlartifacts --port 5001`, run by Docker Compose with `./mlflow` mounted at `/mlflow`.
 - **Why:** The model registry needs a database behind it, and SQLite is a single file. With `--artifacts-destination`, clients upload and download models through the server, so a Docker container only needs the server's address, not a mounted folder. Port 5000 is taken by macOS AirPlay Receiver.
 - **Not picked:** A plain `./mlruns` folder (no registry), or `--default-artifact-root`, which records paths on this laptop that a container can't see.
 
@@ -66,12 +66,12 @@ Each choice made while building this project, why it was made, and what was not 
 
 - **Decision:** 20 Optuna trials over number of trees, depth, leaf size and share of features per split. Each trial is a child run under one parent run in MLflow.
 - **Why:** Optuna picks each next setting from how earlier ones scored, so 20 trials go further than a 20-point grid. Saving 20 forests of 100 MB+ would fill gigabytes, so only the winner is retrained and saved.
-- **Not picked:** GridSearchCV, which also uses random cross-validation folds instead of the date split.
+- **Not picked:** GridSearchCV. It would work with a `PredefinedSplit` that keeps the date split, but a grid spends most of its trials on settings that earlier results already ruled out.
 
-### 11. Selection rule, fixed before tuning
+### 11. Selection rule, set before tuning ran
 
 - **Decision:** The run with the lowest validation RMSE wins. Runs within 0.05 minutes (3 seconds) of the best count as tied, and the smallest model among them wins.
-- **Why:** Writing the rule down first stops it from being bent after seeing results. 3 seconds of error is invisible to a rider, but a model half the size loads faster and costs less memory in the API container.
+- **Why:** Writing the rule down first stops it from being bent after seeing results. 3 seconds of error is invisible to a rider, but a model a third the size loads faster and costs less memory in the API container.
 - **Not picked:** Lowest RMSE alone; best training score (rewards overfitting).
 
 ### 12. Models saved with skops, trusting only sklearn and project types
@@ -92,13 +92,13 @@ Each choice made while building this project, why it was made, and what was not 
 
 - **Decision:** If the model can't be loaded, the API still starts. `/health` answers 503 with the reason, and `/predict` answers 503.
 - **Why:** A container that crashes on startup restarts in a loop and hides the cause. A clear 503 tells the operator what is wrong.
-- **Not picked:** Failing at startup.
+- **Not picked:** Failing at startup and relying on Docker's restart policy, which loops without saying why.
 
 ### 15. Requests are checked against the training ranges
 
 - **Decision:** Zones must be 1-265 and distance 0.1-100 miles, the same bounds as the cleaning rule. Anything else gets a 422 before the model sees it.
 - **Why:** The model has never seen trips outside these ranges, so its answer there would be a guess dressed up as a prediction.
-- **Not picked:** Accepting any number.
+- **Not picked:** Clamping out-of-range values to the nearest bound and predicting anyway, which hides bad input from the caller.
 
 ### 16. Behaviour tests run on the real model, outside CI
 
@@ -118,4 +118,4 @@ Each choice made while building this project, why it was made, and what was not 
 
 - **Decision:** The image runs as user `app`, and both ports are published on `127.0.0.1`. The MLflow service runs as root so it can create `./mlflow` on any host.
 - **Why:** The API is the part that takes outside requests, so it gets the fewest rights. Binding to `127.0.0.1` keeps MLflow, which has no login, off the local network.
-- **Not picked:** Running everything as root, or publishing ports on all interfaces.
+- **Not picked:** The non-root user for the MLflow service too (on Linux it can't create `./mlflow` on a fresh clone), or publishing ports on all interfaces.

@@ -45,6 +45,8 @@ def load_service() -> ModelService:
     name = config.setting("REGISTERED_MODEL_NAME")
     alias = config.setting("MODEL_ALIAS")
     version = mlflow.MlflowClient().get_model_version_by_alias(name, alias)
-    model = mlflow.sklearn.load_model(f"models:/{name}@{alias}")
+    # Load by the version number just resolved, so the model and the version the
+    # API reports can never differ, even if the alias moves in between.
+    model = mlflow.sklearn.load_model(f"models:/{name}/{version.version}")
     logger.info("Loaded %s version %s (@%s)", name, version.version, alias)
     return ModelService(model=model, name=name, version=str(version.version))

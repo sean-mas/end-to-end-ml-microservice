@@ -31,7 +31,7 @@ def tune(data: tracking.Dataset, n_trials: int) -> dict:
     def objective(trial: optuna.Trial) -> float:
         params = suggest_params(trial)
         name = f"trial-{trial.number:02d}"
-        run_id = tracking.log_run(
+        result = tracking.log_run(
             name,
             models.random_forest(config.FEATURES, **params),
             data,
@@ -39,7 +39,7 @@ def tune(data: tracking.Dataset, n_trials: int) -> dict:
             tags={"stage": "tuning", "trial": str(trial.number)},
             save_model=False,
         )
-        return mlflow.get_run(run_id).data.metrics["val_rmse"]
+        return result.metrics["val_rmse"]
 
     with mlflow.start_run(run_name="rf-optuna-study") as parent:
         mlflow.set_tags({"stage": "tuning-study", "sampler": "TPE"})

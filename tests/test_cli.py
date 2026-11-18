@@ -12,7 +12,9 @@ def test_all_runs_every_stage_in_order(monkeypatch):
     monkeypatch.setattr(
         tune, "tune", lambda d, n_trials: calls.append(f"tune:{n_trials}")
     )
-    monkeypatch.setattr(selection, "select", lambda d: calls.append("select") or "r1")
+    monkeypatch.setattr(
+        selection, "select", lambda d, **kw: calls.append("select") or "r1"
+    )
     monkeypatch.setattr(
         promote, "promote", lambda r: calls.append(f"promote:{r}") or "3"
     )
@@ -31,5 +33,6 @@ def test_every_stage_has_a_command():
         "tune",
         "select",
         "promote",
+        "evaluate",
         "all",
     }

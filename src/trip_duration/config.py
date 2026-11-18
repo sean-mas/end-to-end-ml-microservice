@@ -27,7 +27,8 @@ MAX_DURATION_MINUTES = 60
 MIN_DISTANCE_MILES = 0.1
 MAX_DISTANCE_MILES = 100
 
-# Valid TLC taxi zones. 264 and 265 are "unknown" and "outside NYC".
+# Valid TLC taxi zones. 264 ("unknown") and 265 ("outside of NYC") are kept:
+# real trips use them, and a booking outside the city still needs an estimate.
 MIN_ZONE_ID = 1
 MAX_ZONE_ID = 265
 

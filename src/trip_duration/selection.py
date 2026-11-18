@@ -1,4 +1,4 @@
-"""Stage 3: pick the winner by a rule fixed before tuning, and save it as a candidate.
+"""Stage 3: pick the winner by a rule set before tuning ran, save it as a candidate.
 
 The rule (docs/decisions.md): lowest validation RMSE wins. Runs within
 TOLERANCE_MINUTES of the best count as a tie, and the smallest model among
@@ -6,6 +6,7 @@ them wins, because a smaller model loads and answers faster in the API.
 """
 
 import logging
+from pathlib import Path
 
 import matplotlib
 
@@ -13,6 +14,7 @@ matplotlib.use("Agg")  # draw plots to files; no window needed
 import matplotlib.pyplot as plt
 import mlflow
 import pandas as pd
+from matplotlib.figure import Figure
 
 from . import config, models, tracking
 
@@ -23,13 +25,17 @@ COMPARED_STAGES = ("baseline", "tuning")
 TUNED_PARAMS = ["n_estimators", "max_depth", "min_samples_leaf", "max_features"]
 
 
-def apply_rule(runs: pd.DataFrame, tolerance: float = TOLERANCE_MINUTES) -> pd.Series:
-    """Return the winning row. Needs columns val_rmse and model_mb."""
+def tied_runs(runs: pd.DataFrame, tolerance: float = TOLERANCE_MINUTES) -> pd.DataFrame:
+    """Return the runs within `tolerance` minutes of the lowest validation RMSE."""
     best = runs["val_rmse"].min()
     # The small extra margin stops float rounding (4.10 + 0.05 = 4.1499...) from
     # excluding a run that sits exactly on the edge.
-    tied = runs[runs["val_rmse"] <= best + tolerance + 1e-9]
-    return tied.sort_values(["model_mb", "val_rmse"]).iloc[0]
+    return runs[runs["val_rmse"] <= best + tolerance + 1e-9]
+
+
+def apply_rule(runs: pd.DataFrame, tolerance: float = TOLERANCE_MINUTES) -> pd.Series:
+    """Return the winning row. Needs columns val_rmse and model_mb."""
+    return tied_runs(runs, tolerance).sort_values(["model_mb", "val_rmse"]).iloc[0]
 
 
 def compared_runs() -> pd.DataFrame:
@@ -55,7 +61,7 @@ def _params_of(row: pd.Series) -> dict:
     return {k: float(v) if k == "max_features" else int(v) for k, v in raw.items()}
 
 
-def selection_plot(runs: pd.DataFrame, winner: pd.Series):
+def selection_plot(runs: pd.DataFrame, winner: pd.Series) -> Figure:
     """Validation RMSE against model size, with the tie band and the winner marked.
 
     The mean baseline (9.6 min) is left off so the axis can show the close race.
@@ -119,8 +125,12 @@ def selection_plot(runs: pd.DataFrame, winner: pd.Series):
     return fig
 
 
-def select(data: tracking.Dataset) -> str:
-    """Apply the rule, tag the winner, save it as a candidate run; return its ID."""
+def select(data: tracking.Dataset, chart_path: Path | None = None) -> str:
+    """Apply the rule, tag the winner, save it as a candidate run; return its ID.
+
+    The selection chart is always logged to MLflow, and also saved to
+    `chart_path` when one is given (the CLI passes the README's image).
+    """
     runs = compared_runs()
     winner = apply_rule(runs)
     best = runs["val_rmse"].min()
@@ -130,12 +140,13 @@ def select(data: tracking.Dataset) -> str:
         winner["val_rmse"],
         winner["model_mb"],
         best,
-        (runs["val_rmse"] <= best + TOLERANCE_MINUTES).sum(),
+        len(tied_runs(runs)),
     )
     client = mlflow.MlflowClient()
     client.set_tag(winner["run_id"], "selected", "true")
     fig = selection_plot(runs, winner)
-    fig.savefig(config.PROJECT_ROOT / "docs" / "images" / "model_selection.png")
+    if chart_path is not None:
+        fig.savefig(chart_path)
 
     if winner["tags.stage"] == "baseline":
         # Baseline runs already saved their model; that run is the candidate.
@@ -156,7 +167,7 @@ def select(data: tracking.Dataset) -> str:
             "selected_from": winner["run_name"],
             "rule": f"lowest val_rmse; ties within {TOLERANCE_MINUTES} min -> smallest",
         },
-    )
+    ).run_id
     client.log_figure(run_id, fig, "model_selection.png")
     plt.close(fig)
     return run_id
