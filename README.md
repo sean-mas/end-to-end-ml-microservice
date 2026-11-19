@@ -223,6 +223,7 @@ The behaviour tests need the MLflow container with a promoted model, so CI skips
 ├── tests/               unit, API, CLI, evaluation and behaviour tests
 ├── notebooks/           01-explore.ipynb (why each cleaning rule exists) · 02-evaluate.ipynb (where the model fails)
 ├── docs/                decisions.md · presentation.pdf · presentation-notes.md · slides/ · images/
+├── CLAUDE.md            instructions for AI coding agents working in this repo
 ├── Dockerfile           one image for MLflow and the API
 ├── docker-compose.yaml  mlflow (:5001) and api (:8000)
 ├── sample-request.json  the trip used in the Quick start
